@@ -105,7 +105,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   const LOCKER_RANGE = 150;
   const TOTAL = 30, STAGE_LEN = 10;
   const PKG_LIFE = 8;
-  const HIT_PENALTY = 50;
+  const HANDOFF_BONUS = 50;
 
   const LV = [
     { spawn: 1.6,  warn: 1.00, open: 1.00, doors: 5, double: 0 },
@@ -140,12 +140,12 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   fit(); addEventListener('resize', fit);
 
   const doors = [];
-  for (let i = 0; i < 8; i++) doors.push({ i, x: 200 + i * 100, num: 701 + i, state: 'closed', t: 0, pkg: null, hit: false, dur: 1, openDur: 1 });
+  for (let i = 0; i < 8; i++) doors.push({ i, x: 200 + i * 100, num: 701 + i, state: 'closed', t: 0, pkg: null, greeted: false, dur: 1, openDur: 1 });
 
-  const p = { x: 480, dir: 1, stun: 0, inv: 0, walk: 0, moving: false, dip: 0 };
+  const p = { x: 480, dir: 1, walk: 0, moving: false, dip: 0 };
   const keys = { left: false, right: false };
   let state = 'ready', score = 0, elapsed = 0, spawnT = 0, level = 0;
-  let bag = 0, hits = 0, missed = 0, picked = 0, floats = [], parts = [], shake = 0, banner = null, T = 0;
+  let bag = 0, handoffs = 0, missed = 0, picked = 0, floats = [], parts = [], shake = 0, banner = null, T = 0;
 
   let best = 0;
   try { best = parseInt(localStorage.getItem('moonap-best') || '0', 10) || 0; } catch (e) { best = 0; }
@@ -161,7 +161,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
         <span><kbd>◀</kbd> <kbd>▶</kbd></span><span>복도를 이동해요</span>
         <span><kbd>▲</kbd></span><span>택배 줍기 · 빨리 주울수록 최대 100점</span>
         <span><kbd>▼</kbd></span><span>가방은 3개까지! 왼쪽 택배보관함에서 비워요</span>
-        <span style="color:#e05656;font-weight:700">조심</span><span>문이 덜컹거리고 ‘!’가 뜨면 곧 열려요. 부딪히면 −${HIT_PENALTY}점</span>
+        <span style="color:#2b9673;font-weight:700">꿀팁</span><span>문이 열릴 때 미리 가 있으면 직접 전달받아요! +${HANDOFF_BONUS}점 보너스</span>
       </div>
       <p>딱 30초! 10초마다 스테이지가 올라가요. 더 많은 집에서, 더 자주!</p>
       <div class="btns"><button class="cta" id="startBtn">출동하기</button></div>
@@ -177,7 +177,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
       <h2>오늘 배송 끝!</h2>
       <div class="score-big">${score}점</div>
       <p>${isBest ? '새 최고 점수예요!' : `최고 점수 ${best}점`}</p>
-      <div class="stats"><span>챙긴 택배 ${picked}개</span><span>부딪힘 ${hits}번</span><span>놓친 택배 ${missed}개</span></div>
+      <div class="stats"><span>챙긴 택배 ${picked}개</span><span>직접전달 ${handoffs}번</span><span>놓친 택배 ${missed}개</span></div>
       <div class="btns">
         <button class="cta" id="startBtn">다시 하기</button>
         <button class="sub" id="ctaBtn">문앞택배 알아보기</button>
@@ -193,9 +193,9 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   function start() {
     if (state === 'play') return;
     state = 'play'; score = 0; elapsed = 0; spawnT = 0.6; level = -1;
-    bag = 0; hits = 0; missed = 0; picked = 0; floats = []; parts = []; shake = 0; banner = null;
-    Object.assign(p, { x: 480, dir: 1, stun: 0, inv: 0, dip: 0 });
-    doors.forEach(d => { d.state = 'closed'; d.t = 0; d.pkg = null; d.hit = false; });
+    bag = 0; handoffs = 0; missed = 0; picked = 0; floats = []; parts = []; shake = 0; banner = null;
+    Object.assign(p, { x: 480, dir: 1, dip: 0 });
+    doors.forEach(d => { d.state = 'closed'; d.t = 0; d.pkg = null; d.greeted = false; });
     overlay.hidden = true;
   }
   function end() { state = 'over'; showEnd(); }
@@ -216,7 +216,6 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   }
 
   function pickup() {
-    if (p.stun > 0) return;
     const d = nearDoor();
     if (!d || !d.pkg) { addFloat(p.x, GROUND - 120, '여긴 택배가 없어요', '#7d89a6', 16); return; }
     if (bag >= 3) { addFloat(p.x, GROUND - 120, '가방이 가득! 보관함에서 비워요', '#e08a2e', 17); return; }
@@ -227,7 +226,6 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   }
 
   function emptyBag() {
-    if (p.stun > 0) return;
     if (p.x > LOCKER_RANGE) { addFloat(p.x, GROUND - 120, '보관함 앞에서 비울 수 있어요', '#7d89a6', 16); return; }
     if (!bag) { addFloat(p.x, GROUND - 120, '가방이 비어 있어요', '#7d89a6', 16); return; }
     bag = 0;
@@ -235,11 +233,12 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     addFloat(66, FLOOR - 200, '가방 비움! 다시 출동', '#22a27a', 18);
   }
 
-  function hit(d) {
-    score = Math.max(0, score - HIT_PENALTY);
-    hits++; p.stun = 0.8; p.inv = 1.6; shake = 0.3;
-    addFloat(p.x, GROUND - 130, `쾅! −${HIT_PENALTY}`, '#e05656', 26);
-    addFloat(d.x, DOOR_TOP - 6, '어머, 괜찮아요?', '#5b6b8a', 15);
+  function handoff(d) {
+    score += HANDOFF_BONUS; handoffs++; picked++; p.dip = 0.22;
+    d.state = 'closed'; d.pkg = null; d.t = 0;
+    burst(d.x, FLOOR + 30, ['#ffc94d', '#7fd3b8', '#8fc7ff', '#ffffff']);
+    addFloat(p.x, GROUND - 130, `+${HANDOFF_BONUS} 직접전달!`, '#2b9673', 26);
+    addFloat(d.x, DOOR_TOP - 6, '마침 와 계셨네요, 감사합니다!', '#5b6b8a', 15);
   }
 
   function spawnOne() {
@@ -247,7 +246,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     const cand = ORDER.slice(0, L.doors).map(i => doors[i]).filter(d => d.state === 'closed' && !d.pkg);
     if (!cand.length) return;
     const d = cand[Math.random() * cand.length | 0];
-    d.state = 'warn'; d.t = L.warn; d.dur = L.warn; d.openDur = L.open; d.hit = false;
+    d.state = 'warn'; d.t = L.warn; d.dur = L.warn; d.openDur = L.open; d.greeted = false;
   }
 
   function update(dt) {
@@ -260,14 +259,10 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     }
     const L = LV[level];
 
-    if (p.stun > 0) { p.stun -= dt; p.moving = false; }
-    else {
-      const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
-      p.moving = dir !== 0;
-      if (dir) { p.dir = dir; p.x += dir * 330 * dt; p.walk += dt; }
-      p.x = Math.max(40, Math.min(W - 30, p.x));
-    }
-    if (p.inv > 0) p.inv -= dt;
+    const dir = (keys.right ? 1 : 0) - (keys.left ? 1 : 0);
+    p.moving = dir !== 0;
+    if (dir) { p.dir = dir; p.x += dir * 330 * dt; p.walk += dt; }
+    p.x = Math.max(40, Math.min(W - 30, p.x));
     if (p.dip > 0) p.dip -= dt;
 
     spawnT -= dt;
@@ -281,8 +276,8 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
       if (d.state === 'warn') { d.t -= dt; if (d.t <= 0) { d.state = 'open'; d.t = d.openDur; } }
       else if (d.state === 'open') {
         d.t -= dt;
-        if (!d.hit && p.inv <= 0 && Math.abs(p.x - d.x) < 42) { d.hit = true; hit(d); }
-        if (d.t <= 0) { d.state = 'closed'; d.pkg = { age: 0 }; }
+        if (!d.greeted && Math.abs(p.x - d.x) < 42) { d.greeted = true; handoff(d); }
+        if (d.state === 'open' && d.t <= 0) { d.state = 'closed'; d.pkg = { age: 0 }; }
       }
       if (d.pkg) {
         d.pkg.age += dt;
@@ -437,7 +432,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     if (d.state === 'warn') {
       const bob = Math.sin(T * 12) * 3, prog = 1 - d.t / d.dur;
       const by = top - 58 + bob;
-      ctx.fillStyle = '#ff6b6b'; rr(x - 34, by - 15, 68, 30, 15); ctx.fill();
+      ctx.fillStyle = '#ffc94d'; rr(x - 34, by - 15, 68, 30, 15); ctx.fill();
       ctx.beginPath(); ctx.moveTo(x - 6, by + 14); ctx.lineTo(x, by + 22); ctx.lineTo(x + 6, by + 14); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.font = font(15); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(prog > 0.5 ? '! 덜컹' : '! 철컥', x, by + 1);
@@ -447,7 +442,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   function drawDanger(d) {
     if (d.state !== 'warn' && d.state !== 'open') return;
     const a = d.state === 'open' ? 0.38 : 0.1 + 0.14 * (1 - d.t / d.dur) + Math.sin(T * 14) * 0.04;
-    ell(d.x, GROUND - 2, 48, 12, `rgba(255,107,107,${a})`);
+    ell(d.x, GROUND - 2, 48, 12, `rgba(255,201,77,${a})`);
   }
 
   // ===== 이웃 (동글 사람) =====
@@ -510,14 +505,13 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
 
   // ===== 제비 기사님 =====
   function drawSwallow() {
-    const moving = p.moving && p.stun <= 0;
+    const moving = p.moving;
     const hop = moving ? -Math.abs(Math.sin(p.walk * 11)) * 9 : Math.sin(T * 3) * 1.2;
     const dip = p.dip > 0 ? Math.sin((p.dip / 0.22) * Math.PI) * 8 : 0;
     const x = p.x, gy = GROUND;
     const sc = 1 - hop * -0.004;
     ell(x, gy + 2, 26 + hop * 0.6, 6, 'rgba(120,80,40,.2)');
     ctx.save();
-    if (p.inv > 0 && Math.floor(T * 14) % 2 === 0) ctx.globalAlpha = 0.45;
     ctx.translate(x, gy + hop + dip); ctx.scale(p.dir * sc, 1 / sc);
 
     // 꼬리 (제비 꼬리)
@@ -544,14 +538,9 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     // 부리
     ctx.fillStyle = '#ffbf3f'; ctx.beginPath(); ctx.moveTo(25, -54); ctx.quadraticCurveTo(38, -51, 25, -46); ctx.closePath(); ctx.fill();
     // 눈
-    if (p.stun > 0) {
-      ctx.strokeStyle = '#1d1d2b'; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.moveTo(10, -63); ctx.lineTo(18, -55); ctx.moveTo(18, -63); ctx.lineTo(10, -55); ctx.stroke();
-    } else {
-      ell(14, -59, 8, 8.5, '#ffffff');
-      ell(16, -58, 5.5, 6, '#1d1d2b');
-      ell(18, -60.5, 2, 2, '#ffffff'); ell(14.5, -55.5, 1, 1, '#ffffff');
-    }
+    ell(14, -59, 8, 8.5, '#ffffff');
+    ell(16, -58, 5.5, 6, '#1d1d2b');
+    ell(18, -60.5, 2, 2, '#ffffff'); ell(14.5, -55.5, 1, 1, '#ffffff');
     // 날개
     const flap = moving ? Math.sin(p.walk * 24) * 0.45 : Math.sin(T * 2) * 0.05;
     ctx.save(); ctx.translate(-6, -40); ctx.rotate(-0.35 + flap);
@@ -563,11 +552,8 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     ell(2, -73, 6, 6, '#ffffff'); drawBoxMini(2, -73);
     ctx.restore();
 
-    // 기절 별 / 힌트
-    if (p.stun > 0) {
-      ctx.fillStyle = '#ffc94d'; ctx.font = font(15); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      for (let k = 0; k < 3; k++) { const a = T * 6 + k * 2.1; ctx.fillText('★', x + Math.cos(a) * 22, gy - 94 + Math.sin(a) * 5); }
-    } else if (state === 'play') {
+    // 힌트
+    if (state === 'play') {
       const d = nearDoor(); let hint = null;
       if (d && d.pkg) hint = bag >= 3 ? ['가방 가득!', '#e08a2e'] : ['▲ 줍기', '#22a27a'];
       else if (p.x <= LOCKER_RANGE && bag) hint = ['▼ 비우기', '#2f7fd6'];

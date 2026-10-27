@@ -37,6 +37,14 @@ header p{margin:0;color:var(--muted);font-size:.95rem}
 .hud b{font-family:"Jua",sans-serif;font-weight:400;font-size:1.45rem;margin-left:5px}
 .hud .lbl{color:var(--muted)}
 .hud .grow{flex:1}
+.hud .hname{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;font-size:1.1rem}
+.name-row{display:flex;gap:8px;justify-content:center;align-items:center;margin:14px 0}
+.name-row input{flex:1;min-width:0;font:inherit;font-size:1rem;padding:10px 14px;border-radius:999px;border:2px solid var(--line);background:#fff;color:var(--fg);text-align:center}
+.name-row input:focus-visible{outline:3px solid #ffc94d;outline-offset:2px}
+button.dice{font-size:1.2rem;border:2px solid var(--line);background:#eef6f9;border-radius:999px;width:42px;height:42px;flex:0 0 auto;cursor:pointer}
+button.dice:active{background:var(--line)}
+.result-name{font-family:"Jua",sans-serif;font-size:1.3rem;color:var(--fg);margin:0}
+.result-meta{font-size:.78rem;color:var(--muted);margin:2px 0 0}
 .bag{display:flex;gap:6px;align-items:center}
 .bag i{width:34px;height:28px;border-radius:9px;border:2px dashed var(--line)}
 .bag i.on{border:2px solid #c98a4c;background:var(--kraft);background-image:linear-gradient(90deg,transparent 42%,#f6d7a6 42%,#f6d7a6 58%,transparent 58%)}
@@ -81,6 +89,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   </header>
 
   <div class="hud">
+    <div><span class="lbl">기사님</span><b id="hName" class="hname">-</b></div>
     <div><span class="lbl">점수</span><b id="hScore">0</b></div>
     <div><span class="lbl">스테이지</span><b id="hStage">1</b><span class="lbl">/3</span></div>
     <div><span class="lbl">남은 시간</span><b id="hTime">30</b><span class="lbl">초</span></div>
@@ -121,6 +130,19 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   ];
   const ORDER = [2, 5, 0, 7, 3, 6, 1, 4];
 
+  const NAME_ADJ = ['빠른', '성실한', '친절한', '든든한', '야무진', '씩씩한', '부지런한', '상쾌한', '날쌘', '믿음직한'];
+  const NAME_NOUN = ['제비', '배달왕', '택배요정', '해결사', '번개손', '출동요원', '오늘의영웅', '기사님', '수거왕', '칼배달'];
+  function randomName() {
+    const a = NAME_ADJ[Math.random() * NAME_ADJ.length | 0];
+    const n = NAME_NOUN[Math.random() * NAME_NOUN.length | 0];
+    return `${a}${n}${Math.floor(Math.random() * 90 + 10)}`;
+  }
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+  function stamp() {
+    const d = new Date(), pad = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
   const DOOR_C = [
     ['#a8dcc8', '#6fb39b'], ['#f7b9a8', '#d98a77'], ['#fbe08f', '#d4b04f'], ['#c9b8ee', '#9c87cf'],
     ['#a9d1f2', '#74a6d1'], ['#f5b8d2', '#d488ab'], ['#b9e3a0', '#88bf6c'], ['#f8cfa0', '#d9a26a'],
@@ -156,14 +178,21 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
 
   let best = 0;
   try { best = parseInt(localStorage.getItem('moonap-best') || '0', 10) || 0; } catch (e) { best = 0; }
+  let playerName = '';
+  try { playerName = localStorage.getItem('moonap-name') || ''; } catch (e) { playerName = ''; }
 
   const overlay = document.getElementById('overlay');
   const card = document.getElementById('card');
 
   function showStart() {
+    const suggested = esc(playerName || randomName());
     card.innerHTML = `
       <h2>문앞택배</h2>
       <p>오피스텔 7층, 이웃들이 하나둘 문 앞에 택배를 내놓아요.<br>제비 기사님과 함께 빠르게 챙겨 주세요!</p>
+      <div class="name-row">
+        <input id="nameInput" maxlength="12" placeholder="닉네임 입력" value="${suggested}" autocomplete="off">
+        <button class="dice" id="diceBtn" type="button" title="랜덤 닉네임">🎲</button>
+      </div>
       <div class="rules">
         <span><kbd>◀</kbd> <kbd>▶</kbd></span><span>복도를 이동해요</span>
         <span><kbd>▲</kbd></span><span>택배 줍기 · 빨리 주울수록 최대 100점</span>
@@ -174,7 +203,20 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
       <div class="btns"><button class="cta" id="startBtn">출동하기</button></div>
       ${best ? `<p style="margin-top:10px">최고 점수 ${best}점</p>` : ''}`;
     overlay.hidden = false;
-    const b = document.getElementById('startBtn'); b.onclick = start; b.focus();
+    const nameInput = document.getElementById('nameInput');
+    const diceBtn = document.getElementById('diceBtn');
+    diceBtn.onclick = () => { nameInput.value = randomName(); nameInput.focus(); };
+    const b = document.getElementById('startBtn');
+    b.onclick = () => {
+      let name = nameInput.value.trim().slice(0, 12);
+      if (!name) name = randomName();
+      playerName = name;
+      try { localStorage.setItem('moonap-name', playerName); } catch (e) {}
+      document.getElementById('hName').textContent = playerName;
+      start();
+    };
+    nameInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); b.click(); } });
+    nameInput.focus(); nameInput.select();
   }
 
   function showEnd() {
@@ -182,7 +224,9 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     if (isBest) { best = score; try { localStorage.setItem('moonap-best', String(best)); } catch (e) {} }
     card.innerHTML = `
       <h2>오늘 배송 끝!</h2>
+      <p class="result-name">${esc(playerName || randomName())} 기사님</p>
       <div class="score-big">${score}점</div>
+      <p class="result-meta">${stamp()} 기록</p>
       <p>${isBest ? '새 최고 점수예요!' : `최고 점수 ${best}점`}</p>
       <div class="stats"><span>챙긴 택배 ${picked}개</span><span>직접전달 ${handoffs}번</span><span>놓친 택배 ${missed}개</span></div>
       <div class="btns">

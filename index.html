@@ -44,9 +44,9 @@ header p{margin:0;color:var(--muted);font-size:.95rem}
 @keyframes wob{to{transform:translateY(-2px) rotate(-3deg)}}
 .stage{position:relative;border:2px solid var(--line);border-radius:0 0 22px 22px;overflow:hidden;background:#e3f1f6}
 canvas{display:block;width:100%;height:auto;touch-action:none}
-.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(214,236,243,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);padding:14px}
+.overlay{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;background:rgba(214,236,243,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);padding:14px}
 .overlay[hidden]{display:none}
-.card{background:#fff;color:#2c3550;border-radius:26px;padding:22px 26px;max-width:500px;text-align:center;box-shadow:0 6px 0 #c4dde6}
+.card{background:#fff;color:#2c3550;border-radius:26px;padding:22px 26px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch;text-align:center;box-shadow:0 6px 0 #c4dde6}
 .card h2{font-family:"Jua",sans-serif;font-weight:400;font-size:2.3rem;margin:0 0 4px}
 .card p{margin:4px 0;line-height:1.55;font-size:.95rem;color:#56627f}
 .rules{text-align:left;display:grid;grid-template-columns:auto 1fr;gap:8px 12px;margin:14px auto;max-width:420px;font-size:.92rem;line-height:1.45;color:#3d4766}
@@ -64,6 +64,13 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
 .pad button:active{background:var(--line)}
 @media (pointer:coarse){.pad{display:grid}}
 .foot{color:var(--muted);font-size:.85rem;margin-top:10px}
+@media (max-width:480px){
+  .card{padding:18px 18px}
+  .card h2{font-size:1.8rem}
+  .card p{font-size:.88rem}
+  .rules{font-size:.85rem;gap:7px 10px}
+  .score-big{font-size:2.6rem}
+}
 </style>
 </head>
 <body>
@@ -140,7 +147,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   fit(); addEventListener('resize', fit);
 
   const doors = [];
-  for (let i = 0; i < 8; i++) doors.push({ i, x: 200 + i * 100, num: 701 + i, state: 'closed', t: 0, pkg: null, greeted: false, dur: 1, openDur: 1 });
+  for (let i = 0; i < 8; i++) doors.push({ i, x: 200 + i * 100, num: 701 + i, state: 'closed', t: 0, pkg: null, dur: 1, openDur: 1 });
 
   const p = { x: 480, dir: 1, walk: 0, moving: false, dip: 0 };
   const keys = { left: false, right: false };
@@ -195,7 +202,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     state = 'play'; score = 0; elapsed = 0; spawnT = 0.6; level = -1;
     bag = 0; handoffs = 0; missed = 0; picked = 0; floats = []; parts = []; shake = 0; banner = null;
     Object.assign(p, { x: 480, dir: 1, dip: 0 });
-    doors.forEach(d => { d.state = 'closed'; d.t = 0; d.pkg = null; d.greeted = false; });
+    doors.forEach(d => { d.state = 'closed'; d.t = 0; d.pkg = null; });
     overlay.hidden = true;
   }
   function end() { state = 'over'; showEnd(); }
@@ -217,7 +224,9 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
 
   function pickup() {
     const d = nearDoor();
-    if (!d || !d.pkg) { addFloat(p.x, GROUND - 120, '여긴 택배가 없어요', '#7d89a6', 16); return; }
+    if (!d) { addFloat(p.x, GROUND - 120, '여긴 택배가 없어요', '#7d89a6', 16); return; }
+    if (d.state === 'open') { handoff(d); return; }
+    if (!d.pkg) { addFloat(p.x, GROUND - 120, '여긴 택배가 없어요', '#7d89a6', 16); return; }
     if (bag >= 3) { addFloat(p.x, GROUND - 120, '가방이 가득! 보관함에서 비워요', '#e08a2e', 17); return; }
     const v = pkgValue(d.pkg.age);
     score += v; bag++; picked++; d.pkg = null; p.dip = 0.22;
@@ -246,7 +255,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     const cand = ORDER.slice(0, L.doors).map(i => doors[i]).filter(d => d.state === 'closed' && !d.pkg);
     if (!cand.length) return;
     const d = cand[Math.random() * cand.length | 0];
-    d.state = 'warn'; d.t = L.warn; d.dur = L.warn; d.openDur = L.open; d.greeted = false;
+    d.state = 'warn'; d.t = L.warn; d.dur = L.warn; d.openDur = L.open;
   }
 
   function update(dt) {
@@ -276,8 +285,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
       if (d.state === 'warn') { d.t -= dt; if (d.t <= 0) { d.state = 'open'; d.t = d.openDur; } }
       else if (d.state === 'open') {
         d.t -= dt;
-        if (!d.greeted && Math.abs(p.x - d.x) < 42) { d.greeted = true; handoff(d); }
-        if (d.state === 'open' && d.t <= 0) { d.state = 'closed'; d.pkg = { age: 0 }; }
+        if (d.t <= 0) { d.state = 'closed'; d.pkg = { age: 0 }; }
       }
       if (d.pkg) {
         d.pkg.age += dt;
@@ -555,7 +563,8 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     // 힌트
     if (state === 'play') {
       const d = nearDoor(); let hint = null;
-      if (d && d.pkg) hint = bag >= 3 ? ['가방 가득!', '#e08a2e'] : ['▲ 줍기', '#22a27a'];
+      if (d && d.state === 'open') hint = ['▲ 직접전달!', '#2b9673'];
+      else if (d && d.pkg) hint = bag >= 3 ? ['가방 가득!', '#e08a2e'] : ['▲ 줍기', '#22a27a'];
       else if (p.x <= LOCKER_RANGE && bag) hint = ['▼ 비우기', '#2f7fd6'];
       if (hint) {
         const by = gy - 108 - (bag ? 26 + bag * 6 : 0);

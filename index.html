@@ -120,13 +120,12 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
   const DOOR_W = 60, DOOR_H = 162, DOOR_TOP = FLOOR - DOOR_H;
   const LOCKER_RANGE = 150;
   const TOTAL = 30, STAGE_LEN = 10;
-  const PKG_LIFE = 6;
   const HANDOFF_BONUS = 50;
 
   const LV = [
-    { spawn: 1.3,  warn: 0.9,  open: 0.8,  doors: 6, double: 0.15 },
-    { spawn: 0.85, warn: 0.6,  open: 0.65, doors: 7, double: 0.4 },
-    { spawn: 0.55, warn: 0.4,  open: 0.5,  doors: 8, double: 0.6 },
+    { spawn: 2.0, warn: 1.1,  open: 1.0,  doors: 4, double: 0,    life: 9 },
+    { spawn: 1.3, warn: 0.8,  open: 0.75, doors: 6, double: 0.2,  life: 7 },
+    { spawn: 0.8, warn: 0.55, open: 0.6,  doors: 8, double: 0.45, life: 5.5 },
   ];
   const ORDER = [2, 5, 0, 7, 3, 6, 1, 4];
 
@@ -335,7 +334,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
       }
       if (d.pkg) {
         d.pkg.age += dt;
-        if (d.pkg.age > PKG_LIFE) { d.pkg = null; missed++; addFloat(d.x, FLOOR + 6, '이웃이 다시 들고 갔어요', '#7d89a6', 14); }
+        if (d.pkg.age > L.life) { d.pkg = null; missed++; addFloat(d.x, FLOOR + 6, '이웃이 다시 들고 갔어요', '#7d89a6', 14); }
       }
     }
     if (shake > 0) shake -= dt;
@@ -551,7 +550,7 @@ button:focus-visible{outline:3px solid #ffc94d;outline-offset:3px}
     ctx.moveTo(9, 2); ctx.bezierCurveTo(9, -2, 15, -2, 15, 2); ctx.bezierCurveTo(15, 5, 12, 7, 9, 9);
     ctx.bezierCurveTo(6, 7, 3, 5, 3, 2); ctx.bezierCurveTo(3, -2, 9, -2, 9, 2); ctx.fill();
     ctx.restore();
-    const v = pkgValue(age), left = Math.max(0, 1 - age / PKG_LIFE);
+    const v = pkgValue(age), left = Math.max(0, 1 - age / (LV[level] || LV[0]).life);
     ctx.fillStyle = 'rgba(255,255,255,.85)'; rr(cx - 22, cy - 28, 44, 8, 4); ctx.fill();
     ctx.fillStyle = v >= 70 ? '#3fbf95' : v >= 40 ? '#ffc94d' : '#ff8f6b';
     rr(cx - 20, cy - 26, Math.max(4, 40 * left), 4, 2); ctx.fill();
